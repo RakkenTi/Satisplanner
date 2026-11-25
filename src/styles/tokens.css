@@ -1,0 +1,298 @@
+/* ==================== BASE TYPOGRAPHY & SHARED METRICS ==================== */
+:root {
+  --font-sans: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --radius-xs: 2px;
+  --radius-sm: 3px;
+  --radius-md: 4px;
+  --radius-lg: 6px;
+
+  --topbar-h: 44px;
+  --inspector-w: 326px;
+}
+
+/* ==================== THEME 1: FICSIT STEEL (Warm Industrial Charcoal) ==================== */
+:root,
+[data-theme='ficsit'] {
+  color-scheme: dark;
+
+  --bg-canvas: #141412;
+  --bg-chrome: #1b1b18;
+  --bg-surface: #1d1d1a;
+  --bg-surface-elevated: #252521;
+  --bg-surface-hover: #2d2d28;
+  --bg-node: #1e1e1b;
+  --bg-node-header: #262622;
+  --bg-node-subbar: #191916;
+  --bg-input: #131311;
+  --bg-overlay: rgba(12, 12, 10, 0.72);
+  --bg-badge: #171714;
+
+  --border-subtle: #2c2c27;
+  --border-default: #3a3a34;
+  --border-strong: #52524a;
+
+  --text-primary: #eae7df;
+  --text-secondary: #a8a49a;
+  --text-muted: #76736a;
+  --text-faint: #55534c;
+
+  --accent: #e27620;
+  --accent-hover: #ec8430;
+  --accent-dim: rgba(226, 118, 32, 0.14);
+  --accent-border: #a85617;
+  --accent-ink: #170d04;
+
+  --fluid: #4d98cc;
+  --fluid-text: #7cbbe6;
+  --fluid-dim: rgba(77, 152, 204, 0.14);
+  --fluid-border: #376e94;
+
+  --ok: #4ea36d;
+  --ok-text: #6ec48d;
+  --ok-dim: rgba(78, 163, 109, 0.13);
+  --ok-border: #36734c;
+
+  --warn: #c89a3b;
+  --warn-text: #dfb457;
+  --warn-dim: rgba(200, 154, 59, 0.14);
+  --warn-border: #8c6a24;
+
+  --danger: #d45450;
+  --danger-text: #eb7a76;
+  --danger-dim: rgba(212, 84, 80, 0.14);
+  --danger-border: #963936;
+
+  --sloop: #b083cc;
+  --sloop-dim: rgba(176, 131, 204, 0.14);
+  --sloop-border: #7a5791;
+
+  /* Edges & Canvas Marks */
+  --edge-solid: #d97626;
+  --edge-fluid: #4d98cc;
+  --edge-selected: #f2a154;
+  --edge-overlimit: #d45450;
+  --edge-idle: #4e4d47;
+  --edge-flow-dash: rgba(255, 250, 240, 0.45);
+  --port-border: #141412;
+  --port-idle: #6b6860;
+
+  --minimap-bg: #191916;
+  --minimap-node: #626058;
+  --minimap-edge-solid: rgba(217, 118, 38, 0.48);
+  --minimap-edge-fluid: rgba(77, 152, 204, 0.52);
+
+  --shadow-node: 0 2px 6px rgba(0, 0, 0, 0.45);
+  --shadow-node-selected: 0 4px 14px rgba(0, 0, 0, 0.6), 0 0 0 1px var(--accent);
+  --shadow-panel: 0 12px 32px rgba(0, 0, 0, 0.65);
+
+  /* Crisp subtle crosshair drafting registration mark */
+  --canvas-pattern: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='96' viewBox='0 0 96 96'%3E%3Cpath d='M48 44v8M44 48h8' stroke='%23eae7df' stroke-opacity='0.08' stroke-width='1'/%3E%3C/svg%3E");
+}
+
+/* ==================== THEME 2: DRAFTING PAPER (Light Technical Schematic) ==================== */
+[data-theme='paper'] {
+  color-scheme: light;
+
+  --bg-canvas: #efece4;
+  --bg-chrome: #f7f5ef;
+  --bg-surface: #faf8f3;
+  --bg-surface-elevated: #ffffff;
+  --bg-surface-hover: #ece8de;
+  --bg-node: #ffffff;
+  --bg-node-header: #f3efe6;
+  --bg-node-subbar: #f8f6f0;
+  --bg-input: #f2efe7;
+  --bg-overlay: rgba(26, 25, 22, 0.42);
+  --bg-badge: #ffffff;
+
+  --border-subtle: #e0dbd0;
+  --border-default: #cbc5b7;
+  --border-strong: #a39c8d;
+
+  --text-primary: #1a1916;
+  --text-secondary: #4e4b44;
+  --text-muted: #78746a;
+  --text-faint: #a19c90;
+
+  --accent: #cc5814;
+  --accent-hover: #b84d0e;
+  --accent-dim: rgba(204, 88, 20, 0.11);
+  --accent-border: #cc5814;
+  --accent-ink: #ffffff;
+
+  --fluid: #1d6ca3;
+  --fluid-text: #165987;
+  --fluid-dim: rgba(29, 108, 163, 0.1);
+  --fluid-border: #1d6ca3;
+
+  --ok: #227848;
+  --ok-text: #1c663d;
+  --ok-dim: rgba(34, 120, 72, 0.1);
+  --ok-border: #227848;
+
+  --warn: #a36d12;
+  --warn-text: #8c5c0c;
+  --warn-dim: rgba(163, 109, 18, 0.11);
+  --warn-border: #a36d12;
+
+  --danger: #bf3030;
+  --danger-text: #a82424;
+  --danger-dim: rgba(191, 48, 48, 0.09);
+  --danger-border: #bf3030;
+
+  --sloop: #764599;
+  --sloop-dim: rgba(118, 69, 153, 0.1);
+  --sloop-border: #764599;
+
+  /* Edges & Canvas Marks */
+  --edge-solid: #c95d1a;
+  --edge-fluid: #1d6ca3;
+  --edge-selected: #1a1916;
+  --edge-overlimit: #bf3030;
+  --edge-idle: #b5afa2;
+  --edge-flow-dash: rgba(255, 255, 255, 0.65);
+  --port-border: #ffffff;
+  --port-idle: #9e988b;
+
+  --minimap-bg: #f8f6f0;
+  --minimap-node: #918b7e;
+  --minimap-edge-solid: rgba(201, 93, 26, 0.55);
+  --minimap-edge-fluid: rgba(29, 108, 163, 0.55);
+
+  --shadow-node: 0 1px 3px rgba(26, 25, 22, 0.09), 0 1px 2px rgba(26, 25, 22, 0.06);
+  --shadow-node-selected: 0 4px 12px rgba(26, 25, 22, 0.15), 0 0 0 1px var(--accent);
+  --shadow-panel: 0 10px 28px rgba(26, 25, 22, 0.22);
+
+  --canvas-pattern: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='96' viewBox='0 0 96 96'%3E%3Cpath d='M48 44v8M44 48h8' stroke='%231a1916' stroke-opacity='0.14' stroke-width='1'/%3E%3C/svg%3E");
+}
+
+/* ==================== THEME 3: BLUEPRINT CYAN (Technical CAD Plotter) ==================== */
+[data-theme='blueprint'] {
+  color-scheme: dark;
+
+  --bg-canvas: #0c1722;
+  --bg-chrome: #101f2e;
+  --bg-surface: #112131;
+  --bg-surface-elevated: #172c41;
+  --bg-surface-hover: #1e3750;
+  --bg-node: #132537;
+  --bg-node-header: #182f46;
+  --bg-node-subbar: #0f1e2c;
+  --bg-input: #0a131d;
+  --bg-overlay: rgba(7, 14, 22, 0.76);
+  --bg-badge: #0e1c2a;
+
+  --border-subtle: #1d364f;
+  --border-default: #294969;
+  --border-strong: #3d6994;
+
+  --text-primary: #e8f1f8;
+  --text-secondary: #98b4ce;
+  --text-muted: #60809e;
+  --text-faint: #415d78;
+
+  --accent: #ea8e34;
+  --accent-hover: #f39d48;
+  --accent-dim: rgba(234, 142, 52, 0.15);
+  --accent-border: #b36a22;
+  --accent-ink: #140b02;
+
+  --fluid: #56bfe8;
+  --fluid-text: #84d3f2;
+  --fluid-dim: rgba(86, 191, 232, 0.14);
+  --fluid-border: #3a89a8;
+
+  --ok: #48b882;
+  --ok-text: #70d1a2;
+  --ok-dim: rgba(72, 184, 130, 0.14);
+  --ok-border: #31825b;
+
+  --warn: #d9aa43;
+  --warn-text: #ecc365;
+  --warn-dim: rgba(217, 170, 67, 0.14);
+  --warn-border: #967326;
+
+  --danger: #e05a5a;
+  --danger-text: #f08282;
+  --danger-dim: rgba(224, 90, 90, 0.15);
+  --danger-border: #9c3b3b;
+
+  --sloop: #a68cd9;
+  --sloop-dim: rgba(166, 140, 217, 0.15);
+  --sloop-border: #6f5a99;
+
+  /* Edges & Canvas Marks */
+  --edge-solid: #ea8e34;
+  --edge-fluid: #56bfe8;
+  --edge-selected: #ffffff;
+  --edge-overlimit: #e05a5a;
+  --edge-idle: #385875;
+  --edge-flow-dash: rgba(232, 241, 248, 0.5);
+  --port-border: #0c1722;
+  --port-idle: #517394;
+
+  --minimap-bg: #0f1d2b;
+  --minimap-node: #4e7396;
+  --minimap-edge-solid: rgba(234, 142, 52, 0.55);
+  --minimap-edge-fluid: rgba(86, 191, 232, 0.55);
+
+  --shadow-node: 0 2px 8px rgba(3, 8, 14, 0.55);
+  --shadow-node-selected: 0 4px 16px rgba(3, 8, 14, 0.72), 0 0 0 1px var(--accent);
+  --shadow-panel: 0 12px 32px rgba(3, 8, 14, 0.75);
+
+  --canvas-pattern: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='96' viewBox='0 0 96 96'%3E%3Cpath d='M48 44v8M44 48h8' stroke='%2398b4ce' stroke-opacity='0.14' stroke-width='1'/%3E%3C/svg%3E");
+}
+
+/* ==================== RESET ==================== */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg-canvas);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+button,
+input,
+select {
+  font-family: inherit;
+  color: inherit;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Restrained crisp scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-default);
+  border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-strong);
+}
