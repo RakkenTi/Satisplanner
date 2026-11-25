@@ -35,6 +35,7 @@ interface CanvasProps {
   ) => void;
   onRequestContextSpawn: (pending: PendingSpawnState) => void;
   onSpliceEdge: (edgeId: string, kind: 'splitter' | 'merger') => void;
+  onSplitOverloadedEdge: (edgeId: string) => void;
   onDeleteEdge: (edgeId: string) => void;
   onExpandInputs: (nodeId: string) => void;
   onSnapWholeMachines: (nodeId: string) => void;
@@ -114,6 +115,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   onConnectPorts,
   onRequestContextSpawn,
   onSpliceEdge,
+  onSplitOverloadedEdge,
   onDeleteEdge,
   onExpandInputs,
   onSnapWholeMachines,
@@ -140,6 +142,7 @@ export const Canvas: React.FC<CanvasProps> = ({
     y1: number;
     x2: number;
     y2: number;
+    additive: boolean;
   } | null>(null);
   const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
 
@@ -189,11 +192,11 @@ export const Canvas: React.FC<CanvasProps> = ({
     [viewport, onViewportChange],
   );
 
-  // Canvas background mousedown -> pan or Shift+marquee box select
-  const handleStageMouseDown = (e: React.MouseEvent) => {
-    if (e.button === 1 || (e.button === 0 && !e.shiftKey)) {
-      onSelectNodes([]);
-      onSelectEdge(null);
+  // Middle mouse button anywhere on the stage pans the board without altering selection
+  const handleStageMouseDownCapture = (e: React.MouseEvent) => {
+    if (e.button === 1) {
+      e.preventDefault();
+      e.stopPropagation();
       setIsPanning(true);
       panRef.current = {
         startMouseX: e.clientX,
@@ -201,12 +204,17 @@ export const Canvas: React.FC<CanvasProps> = ({
         startVpX: viewport.x,
         startVpY: viewport.y,
       };
-    } else if (e.button === 0 && e.shiftKey) {
+    }
+  };
+
+  // Left-click drag on empty canvas draws a selection box (plain click clears selection)
+  const handleStageMouseDown = (e: React.MouseEvent) => {
+    if (e.button === 0) {
       const rect = stageRef.current?.getBoundingClientRect();
       if (!rect) return;
       const sx = e.clientX - rect.left;
       const sy = e.clientY - rect.top;
-      setMarquee({ x1: sx, y1: sy, x2: sx, y2: sy });
+      setMarquee({ x1: sx, y1: sy, x2: sx, y2: sy, additive: e.shiftKey });
     }
   };
 
@@ -389,7 +397,7 @@ export const Canvas: React.FC<CanvasProps> = ({
         const right = Math.max(marquee.x1, marquee.x2);
         const top = Math.min(marquee.y1, marquee.y2);
         const bottom = Math.max(marquee.y1, marquee.y2);
-        if (right - left > 8 || bottom - top > 8) {
+        if (right - left > 6 || bottom - top > 6) {
           const wx1 = (left - viewport.x) / viewport.zoom;
           const wy1 = (top - viewport.y) / viewport.zoom;
           const wx2 = (right - viewport.x) / viewport.zoom;
@@ -401,7 +409,15 @@ export const Canvas: React.FC<CanvasProps> = ({
               return n.x + w >= wx1 && n.x <= wx2 && n.y + h >= wy1 && n.y <= wy2;
             })
             .map((n) => n.id);
-          onSelectNodes(inside);
+          onSelectEdge(null);
+          if (marquee.additive) {
+            onSelectNodes(Array.from(new Set([...selectedNodeIds, ...inside])));
+          } else {
+            onSelectNodes(inside);
+          }
+        } else if (!marquee.additive) {
+          onSelectNodes([]);
+          onSelectEdge(null);
         }
         setMarquee(null);
       }
@@ -420,10 +436,12 @@ export const Canvas: React.FC<CanvasProps> = ({
     marquee,
     nodes,
     edges,
+    selectedNodeIds,
     onViewportChange,
     onMoveNodes,
     onRequestContextSpawn,
     onSelectNodes,
+    onSelectEdge,
     screenToWorld,
   ]);
 
@@ -486,7 +504,11 @@ export const Canvas: React.FC<CanvasProps> = ({
         backgroundPosition: `${viewport.x % patternStep}px ${viewport.y % patternStep}px`,
       }}
       onWheel={handleWheel}
+      onMouseDownCapture={handleStageMouseDownCapture}
       onMouseDown={handleStageMouseDown}
+      onAuxClick={(e) => {
+        if (e.button === 1) e.preventDefault();
+      }}
       onDoubleClick={(e) => {
         if (e.target !== e.currentTarget) return;
         const w = screenToWorld(e.clientX, e.clientY);
@@ -583,6 +605,8 @@ export const Canvas: React.FC<CanvasProps> = ({
               const isHovered = hoveredEdgeId === edge.id;
               const item = ITEMS[edge.sourceItemId];
               const rate = se?.flowRate ?? 0;
+              const isFluid = Boolean(se?.isFluid);
+              const canSplitOverload = Boolean(se?.overLimit && se.beltCountAtMax >= 2);
               const tierLabel = se?.overLimit
                 ? `${se.beltCountAtMax}× Max`
                 : se?.minTierName ?? '';
@@ -591,7 +615,7 @@ export const Canvas: React.FC<CanvasProps> = ({
                 <div
                   key={`lbl-${edge.id}`}
                   className={`edge-pill ${isSelected ? 'selected' : ''} ${
-                    se?.isFluid ? 'fluid' : ''
+                    isFluid ? 'fluid' : ''
                   } ${se?.overLimit ? 'overlimit' : ''}`}
                   style={{ left: geom.midX, top: geom.midY }}
                   onMouseEnter={() => setHoveredEdgeId(edge.id)}
@@ -603,7 +627,7 @@ export const Canvas: React.FC<CanvasProps> = ({
                   }}
                   title={
                     se?.overLimit
-                      ? `Exceeds max belt/pipe limit! Needs ${se.beltCountAtMax} belts/pipes.`
+                      ? `Exceeds max ${isFluid ? 'pipe' : 'belt'} limit. Needs ${se.beltCountAtMax} parallel ${isFluid ? 'pipes' : 'belts'}.`
                       : `${item?.name ?? edge.sourceItemId}: ${formatRate(rate)}/min (${tierLabel})`
                   }
                 >
@@ -611,35 +635,62 @@ export const Canvas: React.FC<CanvasProps> = ({
                   <span>{formatRate(rate)}/m</span>
                   {tierLabel && <span className="edge-pill-tier">{tierLabel}</span>}
 
-                  {(isSelected || isHovered) && (
+                  {(canSplitOverload || isSelected || isHovered) && (
                     <span
                       className="edge-quick-actions"
                       onMouseDown={(e) => e.stopPropagation()}
                     >
-                      <button
-                        type="button"
-                        className="edge-quick-btn"
-                        title="Insert Splitter on this belt"
-                        onClick={() => onSpliceEdge(edge.id, 'splitter')}
-                      >
-                        Split
-                      </button>
-                      <button
-                        type="button"
-                        className="edge-quick-btn"
-                        title="Insert Merger on this belt"
-                        onClick={() => onSpliceEdge(edge.id, 'merger')}
-                      >
-                        Merge
-                      </button>
-                      <button
-                        type="button"
-                        className="edge-quick-btn danger"
-                        title="Disconnect belt"
-                        onClick={() => onDeleteEdge(edge.id)}
-                      >
-                        ×
-                      </button>
+                      {canSplitOverload && se && (
+                        <button
+                          type="button"
+                          className="edge-quick-btn split-action"
+                          title={`Split source machines into ${se.beltCountAtMax} parallel ${isFluid ? 'pipes' : 'belts'}`}
+                          onClick={() => onSplitOverloadedEdge(edge.id)}
+                        >
+                          Split ×{se.beltCountAtMax}
+                        </button>
+                      )}
+                      {(isSelected || isHovered) && (
+                        <>
+                          {isFluid ? (
+                            <button
+                              type="button"
+                              className="edge-quick-btn"
+                              title="Insert Pipeline Junction on this pipe"
+                              onClick={() => onSpliceEdge(edge.id, 'merger')}
+                            >
+                              Junction
+                            </button>
+                          ) : (
+                            <>
+                              <button
+                                type="button"
+                                className="edge-quick-btn"
+                                title="Insert Splitter on this belt"
+                                onClick={() => onSpliceEdge(edge.id, 'splitter')}
+                              >
+                                Splitter
+                              </button>
+                              <button
+                                type="button"
+                                className="edge-quick-btn"
+                                title="Insert Merger on this belt"
+                                onClick={() => onSpliceEdge(edge.id, 'merger')}
+                              >
+                                Merger
+                              </button>
+                            </>
+                          )}
+                          <button
+                            type="button"
+                            className="edge-quick-btn danger"
+                            title={isFluid ? 'Disconnect pipe' : 'Disconnect belt'}
+                            onClick={() => onDeleteEdge(edge.id)}
+                          >
+                            ×
+                          </button>
+                        </>
+                      )}
                     </span>
                   )}
                 </div>
@@ -685,17 +736,18 @@ export const Canvas: React.FC<CanvasProps> = ({
       </div>
 
       {/* Marquee Selection Overlay */}
-      {marquee && (
-        <div
-          className="marquee-box"
-          style={{
-            left: Math.min(marquee.x1, marquee.x2),
-            top: Math.min(marquee.y1, marquee.y2),
-            width: Math.abs(marquee.x2 - marquee.x1),
-            height: Math.abs(marquee.y2 - marquee.y1),
-          }}
-        />
-      )}
+      {marquee &&
+        (Math.abs(marquee.x2 - marquee.x1) > 4 || Math.abs(marquee.y2 - marquee.y1) > 4) && (
+          <div
+            className="marquee-box"
+            style={{
+              left: Math.min(marquee.x1, marquee.x2),
+              top: Math.min(marquee.y1, marquee.y2),
+              width: Math.abs(marquee.x2 - marquee.x1),
+              height: Math.abs(marquee.y2 - marquee.y1),
+            }}
+          />
+        )}
 
       {/* Empty Canvas CTA */}
       {nodes.length === 0 && (
@@ -773,6 +825,12 @@ export const Canvas: React.FC<CanvasProps> = ({
         </div>
 
         <div className="hud-pill hud-hint">
+          <span className="hud-hint-item">
+            <span className="kbd">Mid Drag</span> Pan
+          </span>
+          <span className="hud-hint-item">
+            <span className="kbd">Drag</span> Select
+          </span>
           <span className="hud-hint-item">
             <span className="kbd">Drag Port</span> Spawn recipe
           </span>

@@ -368,9 +368,11 @@ export function solveFactory(
     const flowRate = Math.max(0, edgeSupply.get(e.id) ?? 0);
     const minSpec = getBeltForRate(flowRate, isFluid);
     const maxSpec = isFluid ? maxFluidSpec : maxSolidSpec;
-    const overLimit = flowRate > maxSpec.ratePerMin + EPS;
+    const rateTol = 0.01;
+    const overLimit = flowRate > maxSpec.ratePerMin + rateTol;
     const loadRatioAtMax = maxSpec.ratePerMin > 0 ? flowRate / maxSpec.ratePerMin : 0;
-    const beltCountAtMax = flowRate > EPS ? Math.ceil((flowRate - EPS) / maxSpec.ratePerMin) : 0;
+    const beltCountAtMax =
+      flowRate > EPS ? Math.max(1, Math.ceil((flowRate - rateTol) / maxSpec.ratePerMin)) : 0;
 
     let status: SolvedEdge['status'] = 'ok';
     if (flowRate <= EPS) status = 'idle';

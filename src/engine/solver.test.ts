@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { buildPowerPlant, buildProductionChain, createRecipeNode } from './autoPlanner';
+import {
+  buildPowerPlant,
+  buildProductionChain,
+  createRecipeNode,
+  splitAllOverloadedEdges,
+  splitOverloadedEdge,
+} from './autoPlanner';
 import { evaluateMathExpr } from './expr';
 import { solveFactory } from './solver';
 import type { FactoryEdge, FactoryNode, PlanSettings } from './types';
@@ -321,5 +327,124 @@ describe('Power Facilities & Alien Power Augmenter', () => {
     const solved = solveFactory(nodes, edges, DEFAULT_SETTINGS);
     expect(solved.totalPowerGeneratedMW).toBeCloseTo(120, 2);
     expect(solved.missingInputs).toHaveLength(0);
+  });
+});
+
+describe('Overloaded Pipe & Belt Splitting', () => {
+  it('splits 10x Water Extractors at 1200 m3/min into two 5x Water Extractor nodes at 600 m3/min each', () => {
+    // 2000 MW Gross Coal Power = 26.6667 Coal Generators, needing 1200 m3/min Water (= 10 Water Extractors)
+    const { nodes, edges } = buildPowerPlant(
+      {
+        generatorRecipeId: 'power-coal',
+        targetMW: 2000,
+        targetMode: 'gross',
+      },
+      DEFAULT_SETTINGS,
+    );
+
+    const before = solveFactory(nodes, edges, DEFAULT_SETTINGS);
+    const waterEdge = edges.find((e) => e.sourceItemId === 'water')!;
+    expect(before.edges[waterEdge.id].flowRate).toBeCloseTo(1200, 1);
+    expect(before.edges[waterEdge.id].overLimit).toBe(true);
+    expect(before.edges[waterEdge.id].beltCountAtMax).toBe(2);
+    expect(before.nodes[waterEdge.sourceNodeId].machines).toBeCloseTo(10, 2);
+
+    const split = splitOverloadedEdge(nodes, edges, waterEdge.id, DEFAULT_SETTINGS);
+    expect(split.splitCount).toBe(2);
+
+    const after = solveFactory(split.nodes, split.edges, DEFAULT_SETTINGS);
+    const waterNodes = split.nodes.filter((n) => n.recipeId === 'water');
+    expect(waterNodes).toHaveLength(2);
+    for (const wn of waterNodes) {
+      expect(after.nodes[wn.id].machines).toBeCloseTo(5, 2);
+      expect(after.nodes[wn.id].outputs['water'].required).toBeCloseTo(600, 1);
+    }
+
+    const waterEdges = split.edges.filter((e) => e.sourceItemId === 'water');
+    expect(waterEdges).toHaveLength(2);
+    for (const we of waterEdges) {
+      expect(after.edges[we.id].flowRate).toBeCloseTo(600, 1);
+      expect(after.edges[we.id].overLimit).toBe(false);
+    }
+
+    expect(after.totalPowerGeneratedMW).toBeCloseTo(2000, 1);
+    expect(after.missingInputs).toHaveLength(0);
+  });
+
+  it('splits pinned source nodes proportionally', () => {
+    const water = createRecipeNode('water', 0, 0, DEFAULT_SETTINGS, {
+      pinMode: 'machines',
+      pinnedValue: 10,
+    });
+    const sink: FactoryNode = {
+      id: 'snk',
+      kind: 'sink',
+      x: 400,
+      y: 0,
+      clockSpeed: 100,
+      somersloops: 0,
+      purity: 'normal',
+      pinMode: 'auto',
+      pinnedValue: 1,
+      itemId: 'water',
+      built: false,
+    };
+    const edges: FactoryEdge[] = [
+      { id: 'ew', sourceNodeId: water.id, sourceItemId: 'water', targetNodeId: sink.id, targetItemId: 'water' },
+    ];
+    const split = splitOverloadedEdge([water, sink], edges, 'ew', DEFAULT_SETTINGS);
+    expect(split.splitCount).toBe(2);
+    const waterNodes = split.nodes.filter((n) => n.recipeId === 'water');
+    expect(waterNodes).toHaveLength(2);
+    expect(waterNodes[0].pinnedValue).toBeCloseTo(5, 3);
+    expect(waterNodes[1].pinnedValue).toBeCloseTo(5, 3);
+
+    const solved = solveFactory(split.nodes, split.edges, DEFAULT_SETTINGS);
+    for (const e of split.edges) {
+      expect(solved.edges[e.id].flowRate).toBeCloseTo(600, 1);
+      expect(solved.edges[e.id].overLimit).toBe(false);
+    }
+  });
+
+  it('eliminates all overloaded pipes and belts in a multi-stage 15 GW Turbofuel plant with splitOverloaded', () => {
+    const { nodes, edges } = buildPowerPlant(
+      {
+        generatorRecipeId: 'power-turbofuel',
+        targetMW: 15000,
+        targetMode: 'gross',
+        fuelRecipeId: 'turbofuel-blend',
+        splitOverloaded: true,
+      },
+      DEFAULT_SETTINGS,
+    );
+
+    const solved = solveFactory(nodes, edges, DEFAULT_SETTINGS);
+    const remainingOverloaded = Object.values(solved.edges).filter((e) => e.overLimit);
+    expect(remainingOverloaded).toHaveLength(0);
+    expect(solved.totalPowerGeneratedMW).toBeCloseTo(15000, 0);
+    expect(solved.missingInputs).toHaveLength(0);
+  });
+
+  it('splits overloaded solid belts when auto-planning high-throughput production chains', () => {
+    const { nodes, edges } = buildProductionChain(
+      'iron-plate',
+      600,
+      DEFAULT_SETTINGS,
+      undefined,
+      true,
+    );
+    const solved = solveFactory(nodes, edges, DEFAULT_SETTINGS);
+    const remainingOverloaded = Object.values(solved.edges).filter((e) => e.overLimit);
+    expect(remainingOverloaded).toHaveLength(0);
+    const plateNodes = nodes.filter((n) => n.recipeId === 'iron-plate');
+    const totalPlates = plateNodes.reduce(
+      (sum, n) => sum + (solved.nodes[n.id].outputs['iron-plate']?.required ?? 0),
+      0,
+    );
+    expect(totalPlates).toBeCloseTo(600, 1);
+
+    // Also verify splitAllOverloadedEdges is a no-op when already balanced
+    const res = splitAllOverloadedEdges(nodes, edges, DEFAULT_SETTINGS);
+    expect(res.splitsPerformed).toBe(0);
   });
 });

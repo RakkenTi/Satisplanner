@@ -61,6 +61,7 @@ export function buildProductionChain(
   targetRatePerMin: number,
   settings: PlanSettings,
   overrideRecipeId?: string,
+  splitOverloaded = false,
 ): { nodes: FactoryNode[]; edges: FactoryEdge[] } {
   const nodes: FactoryNode[] = [];
   const edges: FactoryEdge[] = [];
@@ -120,6 +121,10 @@ export function buildProductionChain(
     }
   }
 
+  if (splitOverloaded) {
+    return splitAllOverloadedEdges(nodes, edges, settings);
+  }
+
   const laidOut = autoLayoutNodes(nodes, edges);
   return { nodes: laidOut, edges };
 }
@@ -132,12 +137,13 @@ export interface PowerPlantPlanOptions {
   purity?: NodePurity;
   alienAugmenters?: { count: number; fueled: boolean };
   autoSinkByproducts?: boolean;
+  splitOverloaded?: boolean;
 }
 
 /**
- * Synthesizes a complete, balanced Satisfactory 1.2 power facility targeting an
- * exact Gross or Net MW output using any generator (Fuel, Coal, Nuclear, Biomass,
- * Geothermal, or Alien Power Augmenter) and any chosen fuel production recipe.
+ * Builds a balanced Satisfactory 1.2 power facility targeting an exact Gross or Net MW
+ * output using any generator (Fuel, Coal, Nuclear, Biomass, Geothermal, or Alien Power
+ * Augmenter) and any chosen fuel production recipe.
  */
 export function buildPowerPlant(
   options: PowerPlantPlanOptions,
@@ -412,7 +418,325 @@ export function buildPowerPlant(
     }
   }
 
+  if (options.splitOverloaded) {
+    return splitAllOverloadedEdges(nodes, edges, effectiveSettings);
+  }
+
   return { nodes: autoLayoutNodes(nodes, edges), edges };
+}
+
+function estimateNodeHeight(n: FactoryNode): number {
+  if (n.kind !== 'recipe' || !n.recipeId) return 118;
+  const r = RECIPES[n.recipeId];
+  if (!r) return 160;
+  const maxPorts = Math.max(Object.keys(r.in).length, Object.keys(r.out).length, 1);
+  return 112 + maxPorts * 34;
+}
+
+function areHomogeneousSources(
+  inEdges: FactoryEdge[],
+  nodeMap: Map<string, FactoryNode>,
+): boolean {
+  if (inEdges.length <= 1) return true;
+  const first = nodeMap.get(inEdges[0].sourceNodeId);
+  if (!first) return false;
+  return inEdges.every((e) => {
+    const n = nodeMap.get(e.sourceNodeId);
+    if (!n) return false;
+    return (
+      n.kind === first.kind &&
+      n.recipeId === first.recipeId &&
+      n.machineId === first.machineId &&
+      n.pinMode === first.pinMode &&
+      n.clockSpeed === first.clockSpeed &&
+      n.purity === first.purity &&
+      n.somersloops === first.somersloops &&
+      n.itemId === first.itemId &&
+      Math.abs((n.pinnedValue ?? 0) - (first.pinnedValue ?? 0)) < 1e-3 &&
+      Math.abs((n.ratePerMin ?? 0) - (first.ratePerMin ?? 0)) < 1e-3
+    );
+  });
+}
+
+export interface SplitEdgeResult {
+  nodes: FactoryNode[];
+  edges: FactoryEdge[];
+  splitCount: number;
+  sourceNodeId: string;
+  newNodeIds: string[];
+}
+
+/**
+ * Splits an overloaded belt or pipe by dividing its source machine node into N parallel
+ * nodes (e.g. 10x Water Extractors at 1200 m3/min -> 2x 5x Water Extractors at 600 m3/min)
+ * and rewiring upstream and downstream connections cleanly.
+ */
+export function splitOverloadedEdge(
+  nodes: FactoryNode[],
+  edges: FactoryEdge[],
+  edgeId: string,
+  settings: PlanSettings,
+  options?: { splitCount?: number; nudgeColumn?: boolean },
+): SplitEdgeResult {
+  const edge = edges.find((e) => e.id === edgeId);
+  if (!edge) {
+    return { nodes, edges, splitCount: 1, sourceNodeId: '', newNodeIds: [] };
+  }
+
+  const src = nodes.find((n) => n.id === edge.sourceNodeId);
+  if (!src) {
+    return { nodes, edges, splitCount: 1, sourceNodeId: '', newNodeIds: [] };
+  }
+
+  let splitCount = options?.splitCount;
+  if (!splitCount) {
+    const solved = solveFactory(nodes, edges, settings);
+    const se = solved.edges[edgeId];
+    if (!se || !se.overLimit || se.beltCountAtMax < 2) {
+      return { nodes, edges, splitCount: 1, sourceNodeId: src.id, newNodeIds: [] };
+    }
+    splitCount = se.beltCountAtMax;
+  }
+
+  splitCount = Math.max(2, Math.min(24, Math.ceil(splitCount)));
+
+  const nodeMap = new Map(nodes.map((n) => [n.id, n]));
+  const srcHeight = estimateNodeHeight(src);
+  const stepY = Math.round((srcHeight + 36) / 24) * 24;
+  const expandHalf = Math.round((((splitCount - 1) * stepY) / 2) / 24) * 24;
+
+  const copies: FactoryNode[] = [];
+  for (let i = 0; i < splitCount; i++) {
+    const copyY = Math.round((src.y + (i - (splitCount - 1) / 2) * stepY) / 24) * 24;
+    const copy: FactoryNode = {
+      ...src,
+      id: i === 0 ? src.id : createId('n'),
+      y: copyY,
+    };
+
+    if (copy.kind === 'recipe' && (copy.pinMode === 'machines' || copy.pinMode === 'output')) {
+      copy.pinnedValue = Number((src.pinnedValue / splitCount).toFixed(4));
+    } else if (copy.kind === 'input') {
+      copy.ratePerMin = Number(((src.ratePerMin ?? 60) / splitCount).toFixed(4));
+    }
+
+    copies.push(copy);
+  }
+
+  // Gently nudge same-column neighbors vertically so split nodes don't overlap them
+  const nudgeColumn = options?.nudgeColumn ?? true;
+  const topCopyY = copies[0].y;
+  const bottomCopyBottom = copies[copies.length - 1].y + srcHeight;
+
+  let needNudgeUp = false;
+  let needNudgeDown = false;
+  if (nudgeColumn) {
+    for (const n of nodes) {
+      if (n.id === src.id) continue;
+      if (Math.abs(n.x - src.x) >= 260) continue;
+      const nh = estimateNodeHeight(n);
+      if (n.y < src.y && n.y + nh + 16 > topCopyY) {
+        needNudgeUp = true;
+      } else if (n.y > src.y && n.y < bottomCopyBottom + 16) {
+        needNudgeDown = true;
+      }
+    }
+  }
+
+  const nextNodes: FactoryNode[] = [];
+  for (const n of nodes) {
+    if (n.id === src.id) {
+      nextNodes.push(...copies);
+    } else if (nudgeColumn && Math.abs(n.x - src.x) < 260) {
+      if (needNudgeUp && n.y < src.y) {
+        nextNodes.push({ ...n, y: Math.round((n.y - expandHalf) / 24) * 24 });
+      } else if (needNudgeDown && n.y > src.y) {
+        nextNodes.push({ ...n, y: Math.round((n.y + expandHalf) / 24) * 24 });
+      } else {
+        nextNodes.push(n);
+      }
+    } else {
+      nextNodes.push(n);
+    }
+  }
+
+  // Partition existing edges
+  const unrelatedEdges: FactoryEdge[] = [];
+  const inEdges: FactoryEdge[] = [];
+  const otherOutEdges: FactoryEdge[] = [];
+
+  for (const e of edges) {
+    if (e.id === edge.id) continue;
+    if (e.targetNodeId === src.id && e.sourceNodeId !== src.id) {
+      inEdges.push(e);
+    } else if (e.sourceNodeId === src.id && e.targetNodeId !== src.id) {
+      otherOutEdges.push(e);
+    } else if (e.sourceNodeId !== src.id && e.targetNodeId !== src.id) {
+      unrelatedEdges.push(e);
+    }
+  }
+
+  const newEdges: FactoryEdge[] = [...unrelatedEdges];
+  const seenEdgeKey = new Set(
+    unrelatedEdges.map(
+      (e) => `${e.sourceNodeId}:${e.sourceItemId}->${e.targetNodeId}:${e.targetItemId}`,
+    ),
+  );
+
+  const pushEdge = (
+    sourceNodeId: string,
+    sourceItemId: string,
+    targetNodeId: string,
+    targetItemId: string,
+    priority?: number,
+  ) => {
+    const key = `${sourceNodeId}:${sourceItemId}->${targetNodeId}:${targetItemId}`;
+    if (seenEdgeKey.has(key)) return;
+    seenEdgeKey.add(key);
+    newEdges.push({
+      id: createId('e'),
+      sourceNodeId,
+      sourceItemId,
+      targetNodeId,
+      targetItemId,
+      priority,
+    });
+  };
+
+  // 1. Wire incoming edges grouped by targetItemId
+  const inByItem = new Map<string, FactoryEdge[]>();
+  for (const e of inEdges) {
+    if (!inByItem.has(e.targetItemId)) inByItem.set(e.targetItemId, []);
+    inByItem.get(e.targetItemId)!.push(e);
+  }
+  for (const [, group] of inByItem) {
+    const homogeneous = areHomogeneousSources(group, nodeMap);
+    if (homogeneous && group.length === splitCount) {
+      // Pair parallel upstream lanes 1-to-1
+      for (let i = 0; i < splitCount; i++) {
+        const g = group[i];
+        pushEdge(g.sourceNodeId, g.sourceItemId, copies[i].id, g.targetItemId, g.priority);
+      }
+    } else if (homogeneous && group.length > splitCount && group.length % splitCount === 0) {
+      const perCopy = group.length / splitCount;
+      for (let i = 0; i < splitCount; i++) {
+        for (let j = 0; j < perCopy; j++) {
+          const g = group[i * perCopy + j];
+          pushEdge(g.sourceNodeId, g.sourceItemId, copies[i].id, g.targetItemId, g.priority);
+        }
+      }
+    } else {
+      for (const g of group) {
+        for (const copy of copies) {
+          pushEdge(g.sourceNodeId, g.sourceItemId, copy.id, g.targetItemId, g.priority);
+        }
+      }
+    }
+  }
+
+  // 2. Wire the target overloaded edge as splitCount parallel connections
+  for (const copy of copies) {
+    pushEdge(copy.id, edge.sourceItemId, edge.targetNodeId, edge.targetItemId, edge.priority);
+  }
+
+  // 3. Wire any other outgoing edges from src (e.g. byproducts or sibling consumers)
+  const outByItem = new Map<string, FactoryEdge[]>();
+  for (const e of otherOutEdges) {
+    if (!outByItem.has(e.sourceItemId)) outByItem.set(e.sourceItemId, []);
+    outByItem.get(e.sourceItemId)!.push(e);
+  }
+  for (const [, group] of outByItem) {
+    const distinctTargets = new Set(group.map((g) => g.targetNodeId));
+    if (group.length === splitCount && distinctTargets.size === splitCount) {
+      for (let i = 0; i < splitCount; i++) {
+        const g = group[i];
+        pushEdge(copies[i].id, g.sourceItemId, g.targetNodeId, g.targetItemId, g.priority);
+      }
+    } else {
+      for (const g of group) {
+        for (const copy of copies) {
+          pushEdge(copy.id, g.sourceItemId, g.targetNodeId, g.targetItemId, g.priority);
+        }
+      }
+    }
+  }
+
+  return {
+    nodes: nextNodes,
+    edges: newEdges,
+    splitCount,
+    sourceNodeId: src.id,
+    newNodeIds: copies.map((c) => c.id),
+  };
+}
+
+/**
+ * Iteratively splits all overloaded pipes and belts in topological order (upstream first)
+ * so parallel lanes pair 1-to-1, then lays out the resulting graph.
+ */
+export function splitAllOverloadedEdges(
+  nodes: FactoryNode[],
+  edges: FactoryEdge[],
+  settings: PlanSettings,
+): { nodes: FactoryNode[]; edges: FactoryEdge[]; splitsPerformed: number } {
+  let curNodes = nodes;
+  let curEdges = edges;
+  let splitsPerformed = 0;
+  const MAX_PASSES = 20;
+  const MAX_NODES = 160;
+
+  for (let pass = 0; pass < MAX_PASSES; pass++) {
+    if (curNodes.length >= MAX_NODES) break;
+    const solved = solveFactory(curNodes, curEdges, settings);
+    const overloaded = curEdges
+      .map((e) => ({ edge: e, se: solved.edges[e.id] }))
+      .filter((x) => x.se && x.se.overLimit && x.se.beltCountAtMax >= 2);
+
+    if (overloaded.length === 0) break;
+
+    // Compute approximate topological depth so upstream extractors split before downstream consumers
+    const depth = new Map<string, number>();
+    for (const n of curNodes) depth.set(n.id, 0);
+    for (let p = 0; p < Math.min(curNodes.length, 16); p++) {
+      let changed = false;
+      for (const e of curEdges) {
+        if (e.sourceNodeId === e.targetNodeId) continue;
+        const dSrc = depth.get(e.sourceNodeId) ?? 0;
+        const dDst = depth.get(e.targetNodeId) ?? 0;
+        if (dDst <= dSrc) {
+          depth.set(e.targetNodeId, dSrc + 1);
+          changed = true;
+        }
+      }
+      if (!changed) break;
+    }
+
+    overloaded.sort((a, b) => {
+      const da = depth.get(a.edge.sourceNodeId) ?? 0;
+      const db = depth.get(b.edge.sourceNodeId) ?? 0;
+      if (da !== db) return da - db;
+      if (a.se.isFluid !== b.se.isFluid) return a.se.isFluid ? -1 : 1;
+      return b.se.flowRate - a.se.flowRate;
+    });
+
+    const target = overloaded[0];
+    if (curNodes.length + (target.se.beltCountAtMax - 1) > MAX_NODES) break;
+
+    const res = splitOverloadedEdge(curNodes, curEdges, target.edge.id, settings, {
+      splitCount: target.se.beltCountAtMax,
+      nudgeColumn: false,
+    });
+    if (res.splitCount <= 1) break;
+    curNodes = res.nodes;
+    curEdges = res.edges;
+    splitsPerformed += 1;
+  }
+
+  return {
+    nodes: autoLayoutNodes(curNodes, curEdges),
+    edges: curEdges,
+    splitsPerformed,
+  };
 }
 
 /**

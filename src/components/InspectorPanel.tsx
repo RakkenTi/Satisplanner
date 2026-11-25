@@ -24,6 +24,7 @@ import {
 } from '../data/catalog';
 import { evaluateMathExpr } from '../engine/expr';
 import type {
+  FactoryEdge,
   FactoryNode,
   NodePurity,
   PlanSettings,
@@ -39,12 +40,19 @@ interface InspectorPanelProps {
   activeTab: InspectorTab;
   onTabChange: (tab: InspectorTab) => void;
   selectedNode: FactoryNode | null;
+  selectedEdge: FactoryEdge | null;
+  nodes: FactoryNode[];
+  edges: FactoryEdge[];
   solved: SolvedFactory;
   settings: PlanSettings;
   onUpdateNode: (nodeId: string, patch: Partial<FactoryNode>) => void;
   onSwapNodeRecipe: (nodeId: string, newRecipeId: string) => void;
   onExpandInputs: (nodeId: string, recursive: boolean) => void;
   onSnapWholeMachines: (nodeId: string) => void;
+  onSplitOverloadedEdge: (edgeId: string) => void;
+  onSplitAllOverloaded: () => void;
+  onSpliceEdge: (edgeId: string, kind: 'splitter' | 'merger') => void;
+  onDeleteEdge: (edgeId: string) => void;
   onUpdateSettings: (patch: Partial<PlanSettings>) => void;
   onClearAllBuilt: () => void;
 }
@@ -56,12 +64,19 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
   activeTab,
   onTabChange,
   selectedNode,
+  selectedEdge,
+  nodes,
+  edges,
   solved,
   settings,
   onUpdateNode,
   onSwapNodeRecipe,
   onExpandInputs,
   onSnapWholeMachines,
+  onSplitOverloadedEdge,
+  onSplitAllOverloaded,
+  onSpliceEdge,
+  onDeleteEdge,
   onUpdateSettings,
   onClearAllBuilt,
 }) => {
@@ -69,6 +84,15 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
   const [itemSearch, setItemSearch] = useState('');
 
   const selectedSolved = selectedNode ? solved.nodes[selectedNode.id] : undefined;
+  const selectedSolvedEdge = selectedEdge ? solved.edges[selectedEdge.id] : undefined;
+  const overloadedEdges = useMemo(
+    () =>
+      edges
+        .map((edge) => ({ edge, se: solved.edges[edge.id] }))
+        .filter((x) => x.se && x.se.overLimit && x.se.beltCountAtMax >= 2),
+    [edges, solved.edges],
+  );
+  const nodeMap = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes]);
   const selectedRecipe =
     selectedNode?.kind === 'recipe' && selectedNode.recipeId
       ? RECIPES[selectedNode.recipeId]
@@ -159,14 +183,147 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
         {/* ==================== INSPECT TAB ==================== */}
         {activeTab === 'inspect' && (
           <>
-            {!selectedNode ? (
+            {!selectedNode && selectedEdge && selectedSolvedEdge ? (
+              (() => {
+                const item = ITEMS[selectedEdge.sourceItemId];
+                const isFluid = selectedSolvedEdge.isFluid;
+                const srcNode = nodeMap.get(selectedEdge.sourceNodeId);
+                const dstNode = nodeMap.get(selectedEdge.targetNodeId);
+                const srcName =
+                  srcNode?.label ||
+                  (srcNode?.recipeId ? RECIPES[srcNode.recipeId]?.name : srcNode?.kind) ||
+                  'Source';
+                const dstName =
+                  dstNode?.label ||
+                  (dstNode?.recipeId ? RECIPES[dstNode.recipeId]?.name : dstNode?.kind) ||
+                  'Target';
+                const unit = isFluid ? ' m³/min' : '/min';
+
+                return (
+                  <>
+                    <div className="panel-section">
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <SpriteIcon
+                          iconId={item?.icon ?? selectedEdge.sourceItemId}
+                          size={32}
+                        />
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          <div style={{ fontWeight: 700, fontSize: 14 }}>
+                            {item?.name ?? selectedEdge.sourceItemId}
+                          </div>
+                          <div style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
+                            {srcName} → {dstName}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="summary-list">
+                        <div className="summary-row">
+                          <span className="summary-row-name">Flow Rate</span>
+                          <span className="summary-row-val">
+                            {formatRate(selectedSolvedEdge.flowRate)}
+                            {unit}
+                          </span>
+                        </div>
+                        <div
+                          className={`summary-row ${
+                            selectedSolvedEdge.overLimit ? 'danger' : ''
+                          }`}
+                        >
+                          <span className="summary-row-name">
+                            {isFluid ? 'Pipe Tier' : 'Belt Tier'}
+                          </span>
+                          <span className="summary-row-val">
+                            {selectedSolvedEdge.overLimit
+                              ? `${selectedSolvedEdge.beltCountAtMax}× Max (Over limit)`
+                              : selectedSolvedEdge.minTierName}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {selectedSolvedEdge.overLimit && selectedSolvedEdge.beltCountAtMax >= 2 && (
+                      <div className="panel-section">
+                        <div className="section-label" style={{ color: 'var(--danger)' }}>
+                          <span>
+                            <AlertTriangle
+                              size={11}
+                              style={{ display: 'inline', verticalAlign: '-1px', marginRight: 4 }}
+                            />
+                            {isFluid ? 'Pipe Limit Exceeded' : 'Belt Limit Exceeded'}
+                          </span>
+                        </div>
+                        <p style={{ margin: 0, fontSize: 11.5, color: 'var(--text-secondary)' }}>
+                          Splits {srcName} into {selectedSolvedEdge.beltCountAtMax} parallel machine
+                          nodes so each {isFluid ? 'pipe' : 'belt'} stays within your configured
+                          tier limit.
+                        </p>
+                        <button
+                          type="button"
+                          className="btn btn-primary btn-sm"
+                          onClick={() => onSplitOverloadedEdge(selectedEdge.id)}
+                        >
+                          Split into {selectedSolvedEdge.beltCountAtMax} Parallel{' '}
+                          {isFluid ? 'Pipes' : 'Belts'}
+                        </button>
+                      </div>
+                    )}
+
+                    <div className="panel-section">
+                      <div className="section-label">
+                        <span>Connection Actions</span>
+                      </div>
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        {isFluid ? (
+                          <button
+                            type="button"
+                            className="btn btn-sm"
+                            style={{ flex: 1 }}
+                            onClick={() => onSpliceEdge(selectedEdge.id, 'merger')}
+                          >
+                            Insert Pipe Junction
+                          </button>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              className="btn btn-sm"
+                              style={{ flex: 1 }}
+                              onClick={() => onSpliceEdge(selectedEdge.id, 'splitter')}
+                            >
+                              Insert Splitter
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-sm"
+                              style={{ flex: 1 }}
+                              onClick={() => onSpliceEdge(selectedEdge.id, 'merger')}
+                            >
+                              Insert Merger
+                            </button>
+                          </>
+                        )}
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-ghost"
+                          style={{ color: 'var(--danger)' }}
+                          onClick={() => onDeleteEdge(selectedEdge.id)}
+                        >
+                          Disconnect
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                );
+              })()
+            ) : !selectedNode ? (
               <div style={{ padding: '24px 8px', textAlign: 'center', color: 'var(--text-muted)' }}>
                 <p style={{ margin: '0 0 8px', color: 'var(--text-secondary)', fontWeight: 600 }}>
                   No node selected
                 </p>
                 <p style={{ margin: 0, fontSize: 12 }}>
-                  Click any machine, splitter, merger, or import node on the canvas to configure
-                  overclocking, Somersloops, node purity, or swap alternate recipes.
+                  Click any machine, belt, pipe, or logistics node on the canvas to inspect or
+                  configure it.
                 </p>
               </div>
             ) : selectedNode.kind === 'recipe' && selectedRecipe && selectedMachine ? (
@@ -678,6 +835,53 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
                 </button>
               )}
             </div>
+
+            {/* Alerts: Overloaded Pipes & Belts */}
+            {overloadedEdges.length > 0 && (
+              <div className="panel-section">
+                <div className="section-label" style={{ color: 'var(--danger)' }}>
+                  <span>
+                    <AlertTriangle
+                      size={11}
+                      style={{ display: 'inline', verticalAlign: '-1px', marginRight: 4 }}
+                    />
+                    Overloaded Pipes & Belts ({overloadedEdges.length})
+                  </span>
+                </div>
+                <div className="summary-list">
+                  {overloadedEdges.map(({ edge, se }) => {
+                    const item = ITEMS[edge.sourceItemId];
+                    const unit = se.isFluid ? ' m³/m' : '/m';
+                    return (
+                      <div key={edge.id} className="summary-row danger">
+                        <div className="summary-row-left">
+                          <SpriteIcon iconId={item?.icon ?? edge.sourceItemId} size={18} />
+                          <span className="summary-row-name">
+                            {item?.name ?? edge.sourceItemId} ({formatRate(se.flowRate)}
+                            {unit})
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          className="edge-quick-btn split-action"
+                          onClick={() => onSplitOverloadedEdge(edge.id)}
+                          title={`Split source machines into ${se.beltCountAtMax} parallel ${se.isFluid ? 'pipes' : 'belts'}`}
+                        >
+                          Split ×{se.beltCountAtMax}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-primary"
+                  onClick={onSplitAllOverloaded}
+                >
+                  Split All Overloaded
+                </button>
+              </div>
+            )}
 
             {/* Alerts: Missing Inputs & Unhandled Byproducts */}
             {solved.missingInputs.length > 0 && (

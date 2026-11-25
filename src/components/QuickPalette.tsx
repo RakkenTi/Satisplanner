@@ -29,7 +29,7 @@ interface QuickPaletteProps {
   open: boolean;
   initialMode: PaletteMode;
   onClose: () => void;
-  onAutoBuildChain: (itemId: string, ratePerMin: number) => void;
+  onAutoBuildChain: (itemId: string, ratePerMin: number, splitOverloaded?: boolean) => void;
   onAutoBuildPower: (options: PowerPlantPlanOptions) => void;
   onAddRecipeNode: (recipeId: string) => void;
   onAddLogisticsNode: (kind: Exclude<NodeKind, 'recipe'>) => void;
@@ -121,6 +121,7 @@ export const QuickPalette: React.FC<QuickPaletteProps> = ({
   const [geoPurity, setGeoPurity] = useState<NodePurity>('normal');
   const [apaOption, setApaOption] = useState<ApaOption>('none');
   const [autoSinkByproducts, setAutoSinkByproducts] = useState(true);
+  const [splitOverloaded, setSplitOverloaded] = useState(false);
 
   const inputRef = useRef<HTMLInputElement | null>(null);
   const powerInputRef = useRef<HTMLInputElement | null>(null);
@@ -269,6 +270,7 @@ export const QuickPalette: React.FC<QuickPaletteProps> = ({
       purity: geoPurity,
       alienAugmenters,
       autoSinkByproducts,
+      splitOverloaded,
     });
     onClose();
   };
@@ -331,7 +333,7 @@ export const QuickPalette: React.FC<QuickPaletteProps> = ({
     if (entry.type === 'item') {
       const parsed = evaluateMathExpr(rateDraft);
       const rate = parsed && parsed > 0 ? parsed : 10;
-      onAutoBuildChain(entry.item.id, rate);
+      onAutoBuildChain(entry.item.id, rate, splitOverloaded);
       onClose();
     } else if (entry.type === 'recipe') {
       onAddRecipeNode(entry.recipe.id);
@@ -642,23 +644,43 @@ export const QuickPalette: React.FC<QuickPaletteProps> = ({
 
             {/* Bottom Action Bar */}
             <div className="power-action-footer">
-              <label
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  fontSize: 11.5,
-                  color: 'var(--text-secondary)',
-                  cursor: 'pointer',
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={autoSinkByproducts}
-                  onChange={(e) => setAutoSinkByproducts(e.target.checked)}
-                />
-                <span>Auto-sink byproducts</span>
-              </label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <label
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    fontSize: 11.5,
+                    color: 'var(--text-secondary)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={autoSinkByproducts}
+                    onChange={(e) => setAutoSinkByproducts(e.target.checked)}
+                  />
+                  <span>Auto-sink byproducts</span>
+                </label>
+                <label
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    fontSize: 11.5,
+                    color: 'var(--text-secondary)',
+                    cursor: 'pointer',
+                  }}
+                  title="Split machines into parallel nodes when any pipe or belt exceeds your max tier"
+                >
+                  <input
+                    type="checkbox"
+                    checked={splitOverloaded}
+                    onChange={(e) => setSplitOverloaded(e.target.checked)}
+                  />
+                  <span>Split overloaded pipes & belts</span>
+                </label>
+              </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <span className="mono" style={{ fontSize: 11, color: 'var(--ok)' }}>
@@ -738,6 +760,38 @@ export const QuickPalette: React.FC<QuickPaletteProps> = ({
                 </label>
               )}
             </div>
+
+            {mode === 'chain' && (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '6px 14px',
+                  borderBottom: '1px solid var(--border-subtle)',
+                  background: 'var(--bg-surface)',
+                }}
+              >
+                <label
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    fontSize: 11.5,
+                    color: 'var(--text-secondary)',
+                    cursor: 'pointer',
+                  }}
+                  title="Split machines into parallel nodes when any pipe or belt exceeds your max tier"
+                >
+                  <input
+                    type="checkbox"
+                    checked={splitOverloaded}
+                    onChange={(e) => setSplitOverloaded(e.target.checked)}
+                  />
+                  <span>Split overloaded pipes & belts</span>
+                </label>
+              </div>
+            )}
 
             <div className="palette-results">
               {results.length === 0 ? (

@@ -14,6 +14,8 @@ import {
   createId,
   createRecipeNode,
   expandMissingInputsForNode,
+  splitAllOverloadedEdges,
+  splitOverloadedEdge,
   type PowerPlantPlanOptions,
 } from './engine/autoPlanner';
 import { solveFactory } from './engine/solver';
@@ -129,10 +131,22 @@ export function App() {
     return activeOutpost.nodes.find((n) => n.id === selectedNodeIds[0]) ?? null;
   }, [activeOutpost.nodes, selectedNodeIds]);
 
+  const selectedEdge = useMemo(() => {
+    if (!selectedEdgeId) return null;
+    return activeOutpost.edges.find((e) => e.id === selectedEdgeId) ?? null;
+  }, [activeOutpost.edges, selectedEdgeId]);
+
   // Auto-switch inspector tab to Inspect when selecting a node
   const handleSelectNodes = useCallback((ids: string[]) => {
     setSelectedNodeIds(ids);
     if (ids.length === 1) {
+      setInspectorTab('inspect');
+    }
+  }, []);
+
+  const handleSelectEdge = useCallback((edgeId: string | null) => {
+    setSelectedEdgeId(edgeId);
+    if (edgeId) {
       setInspectorTab('inspect');
     }
   }, []);
@@ -362,17 +376,25 @@ export function App() {
 
   const handleSpliceEdge = useCallback(
     (edgeId: string, kind: 'splitter' | 'merger') => {
+      let insertedLabel = kind === 'splitter' ? 'Splitter' : 'Merger';
       mutateActiveOutpost((o) => {
         const edge = o.edges.find((e) => e.id === edgeId);
         if (!edge) return o;
         const src = o.nodes.find((n) => n.id === edge.sourceNodeId);
         const dst = o.nodes.find((n) => n.id === edge.targetNodeId);
         if (!src || !dst) return o;
+        const isFluid = Boolean(ITEMS[edge.sourceItemId]?.isFluid);
+        const effectiveKind: 'splitter' | 'merger' = isFluid ? 'merger' : kind;
+        insertedLabel = isFluid
+          ? 'Pipe Junction'
+          : effectiveKind === 'splitter'
+            ? 'Splitter'
+            : 'Merger';
         const midX = Math.round(((src.x + dst.x) / 2) / 24) * 24;
         const midY = Math.round(((src.y + dst.y) / 2) / 24) * 24;
         const midNode: FactoryNode = {
           id: createId('n'),
-          kind,
+          kind: effectiveKind,
           x: midX,
           y: midY,
           clockSpeed: 100,
@@ -381,7 +403,8 @@ export function App() {
           pinMode: 'auto',
           pinnedValue: 1,
           itemId: edge.sourceItemId,
-          splitterMode: kind === 'splitter' ? 'demand' : undefined,
+          splitterMode: effectiveKind === 'splitter' ? 'demand' : undefined,
+          label: isFluid ? 'Pipe Junction' : undefined,
           built: false,
         };
         const e1: FactoryEdge = {
@@ -405,10 +428,56 @@ export function App() {
         };
       });
       setSelectedEdgeId(null);
-      showToast(`Inserted ${kind === 'splitter' ? 'Splitter' : 'Merger'}`);
+      showToast(`Inserted ${insertedLabel}`);
     },
     [mutateActiveOutpost, showToast],
   );
+
+  const handleSplitOverloadedEdge = useCallback(
+    (edgeId: string) => {
+      let splitCount = 1;
+      let createdIds: string[] = [];
+      let isFluid = false;
+      mutateActiveOutpost((o, settings) => {
+        const edge = o.edges.find((e) => e.id === edgeId);
+        if (!edge) return o;
+        isFluid = Boolean(ITEMS[edge.sourceItemId]?.isFluid);
+        const res = splitOverloadedEdge(o.nodes, o.edges, edgeId, settings);
+        if (res.splitCount <= 1) return o;
+        splitCount = res.splitCount;
+        createdIds = res.newNodeIds;
+        return { ...o, nodes: res.nodes, edges: res.edges };
+      });
+      if (splitCount > 1) {
+        setSelectedEdgeId(null);
+        setSelectedNodeIds(createdIds);
+        showToast(`Split into ${splitCount} parallel ${isFluid ? 'pipes' : 'belts'}`);
+      }
+    },
+    [mutateActiveOutpost, showToast],
+  );
+
+  const handleSplitAllOverloaded = useCallback(() => {
+    let splits = 0;
+    mutateActiveOutpost((o, settings) => {
+      const res = splitAllOverloadedEdges(o.nodes, o.edges, settings);
+      if (res.splitsPerformed === 0) return o;
+      splits = res.splitsPerformed;
+      return {
+        ...o,
+        nodes: res.nodes,
+        edges: res.edges,
+        viewport: computeFitViewport(res.nodes, res.edges),
+      };
+    });
+    if (splits > 0) {
+      setSelectedEdgeId(null);
+      setSelectedNodeIds([]);
+      showToast(`Split ${splits} overloaded ${splits === 1 ? 'line' : 'lines'}`);
+    } else {
+      showToast('No overloaded pipes or belts found');
+    }
+  }, [mutateActiveOutpost, computeFitViewport, showToast]);
 
   const handleDeleteNodes = useCallback(
     (ids: string[]) => {
@@ -544,9 +613,15 @@ export function App() {
   }, [spawnAnchorWorld, activeOutpost.viewport]);
 
   const handleAutoBuildChain = useCallback(
-    (itemId: string, ratePerMin: number) => {
+    (itemId: string, ratePerMin: number, splitOverloaded = false) => {
       mutateActiveOutpost((o, settings) => {
-        const built = buildProductionChain(itemId, ratePerMin, settings);
+        const built = buildProductionChain(
+          itemId,
+          ratePerMin,
+          settings,
+          undefined,
+          splitOverloaded,
+        );
         const vp = computeFitViewport(built.nodes, built.edges);
         return {
           ...o,
@@ -1005,12 +1080,13 @@ export function App() {
           selectedEdgeId={selectedEdgeId}
           onViewportChange={handleViewportChange}
           onSelectNodes={handleSelectNodes}
-          onSelectEdge={setSelectedEdgeId}
+          onSelectEdge={handleSelectEdge}
           onMoveNodes={handleMoveNodes}
           onUpdateNode={handleUpdateNode}
           onConnectPorts={handleConnectPorts}
           onRequestContextSpawn={setPendingContextSpawn}
           onSpliceEdge={handleSpliceEdge}
+          onSplitOverloadedEdge={handleSplitOverloadedEdge}
           onDeleteEdge={handleDeleteEdge}
           onExpandInputs={(id) => handleExpandInputs(id, false)}
           onSnapWholeMachines={handleSnapWholeMachines}
@@ -1041,12 +1117,19 @@ export function App() {
           activeTab={inspectorTab}
           onTabChange={setInspectorTab}
           selectedNode={selectedNode}
+          selectedEdge={selectedEdge}
+          nodes={activeOutpost.nodes}
+          edges={activeOutpost.edges}
           solved={solved}
           settings={plan.settings}
           onUpdateNode={handleUpdateNode}
           onSwapNodeRecipe={handleSwapNodeRecipe}
           onExpandInputs={handleExpandInputs}
           onSnapWholeMachines={handleSnapWholeMachines}
+          onSplitOverloadedEdge={handleSplitOverloadedEdge}
+          onSplitAllOverloaded={handleSplitAllOverloaded}
+          onSpliceEdge={handleSpliceEdge}
+          onDeleteEdge={handleDeleteEdge}
           onUpdateSettings={handleUpdateSettings}
           onClearAllBuilt={() =>
             mutateActiveOutpost((o) => ({
