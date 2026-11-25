@@ -61,7 +61,7 @@ export function buildProductionChain(
   targetRatePerMin: number,
   settings: PlanSettings,
   overrideRecipeId?: string,
-  splitOverloaded = false,
+  splitOverloaded = true,
 ): { nodes: FactoryNode[]; edges: FactoryEdge[] } {
   const nodes: FactoryNode[] = [];
   const edges: FactoryEdge[] = [];
@@ -418,7 +418,7 @@ export function buildPowerPlant(
     }
   }
 
-  if (options.splitOverloaded) {
+  if (options.splitOverloaded ?? true) {
     return splitAllOverloadedEdges(nodes, edges, effectiveSettings);
   }
 

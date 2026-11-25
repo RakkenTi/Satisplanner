@@ -121,7 +121,7 @@ export const QuickPalette: React.FC<QuickPaletteProps> = ({
   const [geoPurity, setGeoPurity] = useState<NodePurity>('normal');
   const [apaOption, setApaOption] = useState<ApaOption>('none');
   const [autoSinkByproducts, setAutoSinkByproducts] = useState(true);
-  const [splitOverloaded, setSplitOverloaded] = useState(false);
+  const [splitOverloaded, setSplitOverloaded] = useState(true);
 
   const inputRef = useRef<HTMLInputElement | null>(null);
   const powerInputRef = useRef<HTMLInputElement | null>(null);

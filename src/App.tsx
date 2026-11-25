@@ -613,7 +613,7 @@ export function App() {
   }, [spawnAnchorWorld, activeOutpost.viewport]);
 
   const handleAutoBuildChain = useCallback(
-    (itemId: string, ratePerMin: number, splitOverloaded = false) => {
+    (itemId: string, ratePerMin: number, splitOverloaded = true) => {
       mutateActiveOutpost((o, settings) => {
         const built = buildProductionChain(
           itemId,

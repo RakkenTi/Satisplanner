@@ -338,6 +338,7 @@ describe('Overloaded Pipe & Belt Splitting', () => {
         generatorRecipeId: 'power-coal',
         targetMW: 2000,
         targetMode: 'gross',
+        splitOverloaded: false,
       },
       DEFAULT_SETTINGS,
     );
@@ -369,6 +370,24 @@ describe('Overloaded Pipe & Belt Splitting', () => {
 
     expect(after.totalPowerGeneratedMW).toBeCloseTo(2000, 1);
     expect(after.missingInputs).toHaveLength(0);
+  });
+
+  it('automatically splits overloaded pipes when auto-building a 15 GW Diluted Fuel power plant', () => {
+    const { nodes, edges } = buildPowerPlant(
+      {
+        generatorRecipeId: 'power-fuel',
+        targetMW: 15000,
+        targetMode: 'gross',
+        fuelRecipeId: 'fuel-diluted',
+      },
+      DEFAULT_SETTINGS,
+    );
+
+    const solved = solveFactory(nodes, edges, DEFAULT_SETTINGS);
+    const remainingOverloaded = Object.values(solved.edges).filter((e) => e.overLimit);
+    expect(remainingOverloaded).toHaveLength(0);
+    expect(solved.totalPowerGeneratedMW).toBeCloseTo(15000, 0);
+    expect(solved.missingInputs).toHaveLength(0);
   });
 
   it('splits pinned source nodes proportionally', () => {
