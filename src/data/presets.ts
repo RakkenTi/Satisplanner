@@ -34,7 +34,7 @@ export const FACTORY_TEMPLATES: FactoryTemplate[] = [
   {
     id: 'starter-rip',
     name: 'Reinforced Iron Plates',
-    subtitle: '10/min · Clean starter line with Cast Screws option',
+    subtitle: '10/min · Starter line with Cast Screws',
     tierLabel: 'Tier 1',
     accent: '#FA9549',
     build: (settings) =>
@@ -262,7 +262,7 @@ export const FACTORY_TEMPLATES: FactoryTemplate[] = [
   {
     id: 'empty',
     name: 'Blank Blueprint',
-    subtitle: 'Start from an empty canvas — press Space to add nodes',
+    subtitle: 'Empty canvas. Press Space to add nodes.',
     tierLabel: 'Empty',
     accent: '#76736A',
     build: () => ({ nodes: [], edges: [] }),

@@ -700,10 +700,10 @@ export const Canvas: React.FC<CanvasProps> = ({
       {/* Empty Canvas CTA */}
       {nodes.length === 0 && (
         <div className="empty-canvas-cta" onMouseDown={(e) => e.stopPropagation()}>
-          <h2>Ready to Blueprint</h2>
+          <h2>Empty Canvas</h2>
           <p>
-            Auto-synthesize any Satisfactory 1.2 production line or power facility in 2
-            keystrokes, or drop single machines and drag ports to spawn connected recipes.
+            Plan a production chain or power plant, or drop individual machines and drag ports
+            to connect recipes.
           </p>
           <div className="empty-cta-actions">
             <button

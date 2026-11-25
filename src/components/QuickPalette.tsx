@@ -59,7 +59,7 @@ const LOGISTICS_ENTRIES: Array<{
   {
     kind: 'merger',
     name: 'Merger / Junction',
-    sub: 'Combine multiple belts or recycle byproduct fluid loops cleanly',
+    sub: 'Combine multiple belts or recycle byproduct fluid loops',
   },
   {
     kind: 'input',
@@ -69,7 +69,7 @@ const LOGISTICS_ENTRIES: Array<{
   {
     kind: 'sink',
     name: 'AWESOME Sink / Export Terminal',
-    sub: 'Absorb overflow byproducts or mark clean factory export',
+    sub: 'Absorb overflow byproducts or mark factory export',
   },
 ];
 
@@ -775,7 +775,7 @@ export const QuickPalette: React.FC<QuickPaletteProps> = ({
                               )}
                             </div>
                             <div className="palette-row-sub">
-                              Synthesize full balanced chain · {recCount}{' '}
+                              Build full chain · {recCount}{' '}
                               {recCount === 1 ? 'recipe' : 'recipes'} available
                             </div>
                           </div>

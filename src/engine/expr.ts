@@ -1,7 +1,7 @@
 /**
  * Safe, zero-eval arithmetic expression parser supporting +, -, *, /, parentheses,
  * and decimals so players can type "480/2", "3*60", "(120+45)/3" directly into
- * rate, machine count, and clock inputs — just like Satisfactory's in-game quick calc.
+ * rate, machine count, and clock inputs, like Satisfactory's in-game quick calc.
  */
 export function evaluateMathExpr(input: string): number | null {
   const s = input.replace(/,/g, '').replace(/\s+/g, '');

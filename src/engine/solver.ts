@@ -729,7 +729,7 @@ function distributeDemandAcrossInputs(
       edgeDemand.set(e.id, each);
     }
   } else if (remaining > EPS && fixedEdges.length > 0) {
-    // All inputs are pinned/fixed — still record unmet share proportionally so bottleneck shows clearly
+    // All inputs are pinned/fixed; still record unmet share proportionally so bottlenecks show up
     const extraEach = remaining / fixedEdges.length;
     for (const fe of fixedEdges) {
       edgeDemand.set(fe.edge.id, (edgeDemand.get(fe.edge.id) ?? 0) + extraEach);

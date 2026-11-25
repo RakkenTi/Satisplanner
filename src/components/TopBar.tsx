@@ -20,9 +20,9 @@ import type { Outpost, PlanSettings, ThemeId } from '../engine/types';
 import type { PaletteMode } from './QuickPalette';
 
 const THEME_OPTIONS: Array<{ id: ThemeId; label: string; swatch: string; title: string }> = [
-  { id: 'ficsit', label: 'Steel', swatch: '#1d1d1a', title: 'FICSIT Steel (Warm Industrial Charcoal)' },
-  { id: 'paper', label: 'Paper', swatch: '#efece4', title: 'Drafting Paper (Light Technical Sheet)' },
-  { id: 'blueprint', label: 'CAD', swatch: '#102030', title: 'Blueprint Cyan (Aerospace CAD Plotter)' },
+  { id: 'ficsit', label: 'Steel', swatch: '#1d1d1a', title: 'FICSIT Steel' },
+  { id: 'paper', label: 'Paper', swatch: '#efece4', title: 'Drafting Paper' },
+  { id: 'blueprint', label: 'CAD', swatch: '#102030', title: 'Blueprint' },
 ];
 
 interface TopBarProps {
@@ -112,8 +112,8 @@ export const TopBar: React.FC<TopBarProps> = ({
           <div className="brand-mark" aria-hidden="true">
             S
           </div>
-          <h1 className="brand-title">SATISPLAN</h1>
-          <span className="brand-ver" title="Satisfactory 1.2 Official Recipes">
+          <h1 className="brand-title">Satisplanner</h1>
+          <span className="brand-ver" title="Satisfactory 1.2 Recipes">
             1.2
           </span>
         </div>
@@ -217,7 +217,7 @@ export const TopBar: React.FC<TopBarProps> = ({
           className="theme-switcher"
           role="group"
           aria-label="Workspace Theme"
-          title="Switch Workspace Theme (FICSIT Steel · Drafting Paper · Blueprint CAD)"
+          title="Switch workspace theme"
         >
           {THEME_OPTIONS.map((t) => (
             <button
@@ -240,7 +240,7 @@ export const TopBar: React.FC<TopBarProps> = ({
           className="belt-selector"
           role="group"
           aria-label="Maximum Conveyor Belt Tier"
-          title="Max Belt Tier (keys 1-6) — edges exceeding this rate show a warning"
+          title="Max belt tier (keys 1-6). Edges above this rate show a warning."
         >
           {BELTS.map((b) => (
             <button
@@ -262,7 +262,7 @@ export const TopBar: React.FC<TopBarProps> = ({
           type="button"
           className="btn btn-ghost"
           onClick={onAutoLayout}
-          title="Clean Layered Auto-Layout (A)"
+          title="Auto-layout (A)"
         >
           <LayoutGrid size={14} />
           <span>Layout</span>
@@ -311,7 +311,7 @@ export const TopBar: React.FC<TopBarProps> = ({
             type="button"
             className="btn"
             onClick={() => setTemplatesOpen((v) => !v)}
-            title="Load Curated Satisfactory 1.2 Factory Templates"
+            title="Load factory templates"
           >
             <FolderOpen size={13} />
             <span>Templates</span>

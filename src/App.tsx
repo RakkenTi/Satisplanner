@@ -27,7 +27,8 @@ import type {
   ViewportState,
 } from './engine/types';
 
-const STORAGE_KEY = 'satisplan_factory_v1_2';
+const STORAGE_KEY = 'satisplanner_factory_v1_2';
+const LEGACY_STORAGE_KEY = 'satisplan_factory_v1_2';
 const OUTPOST_ACCENTS = ['#E27620', '#4D98CC', '#4EA36D', '#C89A3B', '#B083CC', '#D45450'];
 
 function normalizePlan(parsed: FactoryPlan): FactoryPlan {
@@ -58,7 +59,7 @@ function loadSavedPlan(): FactoryPlan {
 
   // 2. Check localStorage
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(LEGACY_STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as FactoryPlan;
       if (parsed && Array.isArray(parsed.outposts) && parsed.outposts.length > 0) {
@@ -525,7 +526,7 @@ export function App() {
         viewport: computeFitViewport(laidOut, o.edges),
       };
     });
-    showToast('Auto-laid out factory cleanly');
+    showToast('Layout updated');
   }, [mutateActiveOutpost, computeFitViewport, showToast]);
 
   // --- Quick Palette & Context Drag-to-Spawn Actions ---
@@ -815,7 +816,7 @@ export function App() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `satisplan-${activeOutpost.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.json`;
+    a.download = `satisplanner-${activeOutpost.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.json`;
     a.click();
     URL.revokeObjectURL(url);
     showToast('Exported blueprint JSON');
@@ -833,7 +834,7 @@ export function App() {
             setSelectedEdgeId(null);
             showToast(`Imported ${parsed.outposts.length} outpost(s)`);
           } else {
-            showToast('Invalid SATISPLAN JSON file');
+            showToast('Invalid Satisplanner JSON file');
           }
         } catch {
           showToast('Could not parse JSON file');
@@ -855,7 +856,7 @@ export function App() {
       }
       showToast('Copied shareable blueprint URL to clipboard');
     } catch {
-      showToast('Blueprint too large for URL — use Export JSON');
+      showToast('Blueprint too large for URL. Use Export JSON instead.');
     }
   }, [plan, showToast]);
 

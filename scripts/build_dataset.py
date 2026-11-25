@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-Builds a clean, normalized Satisfactory 1.2 dataset for SATISPLAN
-from the verified FactorioLab Satisfactory 1.2 dataset + power generator specs.
+Builds the Satisfactory 1.2 dataset for Satisplanner
+from the FactorioLab Satisfactory 1.2 dataset + power generator specs.
 """
 import json
 from pathlib import Path
 
 SRC = Path("/tmp/factoriolab/public/data/sfy/data.json")
-OUT = Path("/home/antigravity/satisfactory-planner/src/data/satisfactoryData.json")
+OUT = Path(__file__).resolve().parent.parent / "src/data/satisfactoryData.json"
 OUT.parent.mkdir(parents=True, exist_ok=True)
 
 with SRC.open() as f:
